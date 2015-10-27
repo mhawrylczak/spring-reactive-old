@@ -25,6 +25,8 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
 
     private ByteBuffer buffer;
 
+    private StreamSinkChannel responseChannel;
+
     public ResponseBodySubscriber(HttpServerExchange exchange) {
         this.exchange = exchange;
     }
@@ -38,7 +40,9 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
     @Override
     public void onNext(ByteBuffer bytes) {
         this.buffer = bytes;
-        final StreamSinkChannel responseChannel = exchange.getResponseChannel();
+        if (responseChannel == null) {
+            responseChannel = exchange.getResponseChannel();
+        }
         try {
             int c;
             do {
@@ -86,8 +90,8 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
 
     @Override
     public void onComplete() {
-        if (exchange.getResponseChannel() != null) {
-            writeDone(exchange.getResponseChannel());
+        if (responseChannel != null) {
+            writeDone(responseChannel);
         }
         logger.debug("onComplete");
     }
