@@ -7,6 +7,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.reactive.web.http.ServerHttpRequest;
+import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -39,7 +40,11 @@ public class UndertowServerHttpRequest implements ServerHttpRequest {
     @Override
     public URI getURI() {
         try {
-            return new URI(exchange.getRequestURI());
+            StringBuilder uri = new StringBuilder(exchange.getRequestPath());
+            if (StringUtils.hasLength(exchange.getQueryString())){
+                uri.append('?').append(exchange.getQueryString());
+            }
+            return new URI(uri.toString());
         } catch (URISyntaxException ex) {
             throw new IllegalStateException("Could not get URI: " + ex.getMessage(), ex);
         }

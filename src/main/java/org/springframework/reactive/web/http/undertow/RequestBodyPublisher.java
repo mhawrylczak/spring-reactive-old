@@ -59,7 +59,7 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
         public void request(long n) {
             BackpressureUtils.checkRequest(n, subscriber);
 
-            if (cancelled) {
+            if (cancelled || channel == null) {
                 return;
             }
             demand += n;
