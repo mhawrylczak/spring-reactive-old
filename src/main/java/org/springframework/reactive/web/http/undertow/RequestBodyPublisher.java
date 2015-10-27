@@ -73,6 +73,11 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
                         channel.resumeReads();
                     } else if (r == -1) {
                         closeChannel();
+                        if (buffer.position() > 0){
+                            buffer.flip();
+                            subscriber.onNext(buffer);
+                            buffer.clear();
+                        }
                         subscriber.onComplete();
                         safeClose(this);
                     } else {

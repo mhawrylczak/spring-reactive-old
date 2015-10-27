@@ -19,10 +19,6 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer> {
 
     private Subscription subscription;
 
-    private ByteBuffer buffer;
-
-    private volatile boolean subscriberComplete = false;
-
     public ResponseBodySubscriber(HttpServerExchange exchange) {
         this.exchange = exchange;
     }
@@ -36,7 +32,7 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer> {
     @Override
     public void onNext(ByteBuffer bytes) {
         //TODO handle many buffers
-        exchange.getResponseSender().send(buffer);
+        exchange.getResponseSender().send(bytes);
     }
 
     @Override
@@ -46,7 +42,6 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer> {
 
     @Override
     public void onComplete() {
-        logger.debug("Complete buffer: " + (buffer == null));
-        this.subscriberComplete = true;
+        logger.debug("onComplete");
     }
 }

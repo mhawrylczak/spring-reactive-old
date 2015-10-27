@@ -25,6 +25,7 @@ import org.springframework.reactive.web.http.reactor.ReactorHttpServer;
 import org.springframework.reactive.web.http.rxnetty.RxNettyHttpServer;
 import org.springframework.reactive.web.http.servlet.JettyHttpServer;
 import org.springframework.reactive.web.http.servlet.TomcatHttpServer;
+import org.springframework.reactive.web.http.undertow.UndertowHttpServer;
 import org.springframework.util.SocketUtils;
 
 
@@ -40,10 +41,11 @@ public abstract class AbstractHttpHandlerIntegrationTests {
 	@Parameterized.Parameters(name = "server [{0}]")
 	public static Object[][] arguments() {
 		return new Object[][] {
-				{new JettyHttpServer()},
-				{new TomcatHttpServer()},
-				{new RxNettyHttpServer()},
-		        {new ReactorHttpServer()}
+//				{new JettyHttpServer()},
+//				{new TomcatHttpServer()},
+//				{new RxNettyHttpServer()},
+//		        {new ReactorHttpServer()},
+		        {new UndertowHttpServer()}
 		};
 	}
 
