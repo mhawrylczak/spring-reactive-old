@@ -11,6 +11,7 @@ apply plugin: 'java'
 apply plugin: 'propdeps'
 apply plugin: 'propdeps-idea'
 apply plugin: 'propdeps-maven'
+apply plugin: 'maven-publish'
 
 jar {
 	baseName = 'spring-reactive'
@@ -23,6 +24,14 @@ repositories {
 	mavenLocal()
 	maven { url 'https://oss.jfrog.org/libs-snapshot' }  // RxNetty 0.5.x snapshots
 	maven { url 'http://repo.spring.io/snapshot' }  // Reactor snapshot
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 configurations.all {
@@ -45,6 +54,8 @@ dependencies {
 
 	optional 'org.apache.tomcat:tomcat-util:8.0.24'
 	optional 'org.apache.tomcat.embed:tomcat-embed-core:8.0.24'
+
+    optional 'io.undertow:undertow-core:1.2.11.Final'
 
 	optional 'org.eclipse.jetty:jetty-server:9.3.2.v20150730'
 	optional 'org.eclipse.jetty:jetty-servlet:9.3.2.v20150730'
