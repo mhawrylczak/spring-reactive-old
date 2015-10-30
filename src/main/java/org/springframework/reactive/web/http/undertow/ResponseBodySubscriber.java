@@ -56,12 +56,8 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
             }
 
         } catch (IOException ex) {
-            //TODO
-            ex.printStackTrace();
+            onError(ex);
         }
-
-//        exchange.getResponseSender().send(bytes);
-//        this.subscription.request(1);
     }
 
     @Override
@@ -78,8 +74,7 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
                 this.subscription.request(1);
             }
         } catch (IOException ex) {
-            //TODO
-            ex.printStackTrace();
+            onError(ex);
         }
     }
 
@@ -111,8 +106,7 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
 
             }
         } catch (IOException ex) {
-            //TODO
-            ex.printStackTrace();
+            onError(ex);
         }
     }
 }
