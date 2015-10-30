@@ -7,6 +7,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.reactive.web.http.ServerHttpResponse;
+import reactor.Publishers;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -34,7 +35,7 @@ public class UndertowServerHttpResponse implements ServerHttpResponse {
 
     @Override
     public Publisher<Void> writeWith(Publisher<ByteBuffer> contentPublisher) {
-        writeHeaders();
+        applyHeaders();
         return (s -> contentPublisher.subscribe(responseBodySubscriber));
     }
 
@@ -43,7 +44,13 @@ public class UndertowServerHttpResponse implements ServerHttpResponse {
         return (this.headersWritten ? HttpHeaders.readOnlyHttpHeaders(this.headers) : this.headers);
     }
 
-    private void writeHeaders() {
+    @Override
+    public Publisher<Void> writeHeaders() {
+        applyHeaders();
+        return Publishers.empty();
+    }
+
+    private void applyHeaders() {
         if (!this.headersWritten) {
             for (Map.Entry<String, List<String>> entry : this.headers.entrySet()) {
                 String headerName = entry.getKey();
