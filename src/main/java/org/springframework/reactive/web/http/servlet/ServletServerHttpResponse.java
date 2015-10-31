@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.reactive.web.http.servlet;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
-
 import javax.servlet.http.HttpServletResponse;
 
 import org.reactivestreams.Publisher;
@@ -26,35 +27,38 @@ import reactor.Publishers;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.reactive.web.http.ServerHttpResponse;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 import org.springframework.util.Assert;
 
 /**
  * @author Rossen Stoyanchev
  */
-public class ServletServerHttpResponse implements ServerHttpResponse {
+public class ServletServerHttpResponse implements ReactiveServerHttpResponse {
 
-	private final HttpServletResponse servletResponse;
+	private final HttpServletResponse response;
 
-	private final ResponseBodySubscriber responseSubscriber;
+	private final ResponseBodySubscriber subscriber;
 
 	private final HttpHeaders headers;
 
 	private boolean headersWritten = false;
 
 
-	public ServletServerHttpResponse(HttpServletResponse servletResponse, ResponseBodySubscriber responseSubscriber) {
-		Assert.notNull(servletResponse, "'servletResponse' must not be null");
-		Assert.notNull(responseSubscriber, "'responseSubscriber' must not be null");
-		this.servletResponse = servletResponse;
-		this.responseSubscriber = responseSubscriber;
+	public ServletServerHttpResponse(HttpServletResponse response,
+			ResponseBodySubscriber subscriber) {
+
+		Assert.notNull(response, "'response' must not be null");
+		Assert.notNull(subscriber, "'subscriber' must not be null");
+		this.response = response;
+		this.subscriber = subscriber;
 		this.headers = new HttpHeaders();
 	}
 
 
 	@Override
 	public void setStatusCode(HttpStatus status) {
-		this.servletResponse.setStatus(status.value());
+		this.response.setStatus(status.value());
 	}
 
 	@Override
@@ -69,9 +73,9 @@ public class ServletServerHttpResponse implements ServerHttpResponse {
 	}
 
 	@Override
-	public Publisher<Void> writeWith(final Publisher<ByteBuffer> contentPublisher) {
+	public Publisher<Void> setBody(final Publisher<ByteBuffer> contentPublisher) {
 		applyHeaders();
-		return (s -> contentPublisher.subscribe(responseSubscriber));
+		return (s -> contentPublisher.subscribe(subscriber));
 	}
 
 	private void applyHeaders() {
@@ -79,16 +83,16 @@ public class ServletServerHttpResponse implements ServerHttpResponse {
 			for (Map.Entry<String, List<String>> entry : this.headers.entrySet()) {
 				String headerName = entry.getKey();
 				for (String headerValue : entry.getValue()) {
-					this.servletResponse.addHeader(headerName, headerValue);
+					this.response.addHeader(headerName, headerValue);
 				}
 			}
-			// HttpServletResponse exposes some headers as properties: we should include those if not already present
-			if (this.servletResponse.getContentType() == null && this.headers.getContentType() != null) {
-				this.servletResponse.setContentType(this.headers.getContentType().toString());
+			MediaType contentType = this.headers.getContentType();
+			if (this.response.getContentType() == null && contentType != null) {
+				this.response.setContentType(contentType.toString());
 			}
-			if (this.servletResponse.getCharacterEncoding() == null && this.headers.getContentType() != null &&
-					this.headers.getContentType().getCharSet() != null) {
-				this.servletResponse.setCharacterEncoding(this.headers.getContentType().getCharSet().name());
+			Charset charset = (contentType != null ? contentType.getCharSet() : null);
+			if (this.response.getCharacterEncoding() == null && charset != null) {
+				this.response.setCharacterEncoding(charset.name());
 			}
 			this.headersWritten = true;
 		}

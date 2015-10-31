@@ -16,18 +16,19 @@
 
 package org.springframework.reactive.codec.decoder;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import org.reactivestreams.Publisher;
+import reactor.Publishers;
+
 import org.springframework.core.ResolvableType;
 import org.springframework.http.MediaType;
 import org.springframework.reactive.codec.CodecException;
 import org.springframework.reactive.codec.encoder.JacksonJsonEncoder;
 import org.springframework.reactive.io.ByteBufferInputStream;
-import reactor.Publishers;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * Decode from a bytes stream of JSON objects to a stream of {@code Object} (POJO).
@@ -39,6 +40,7 @@ public class JacksonJsonDecoder implements ByteToMessageDecoder<Object> {
 
 	private final ObjectMapper mapper;
 
+
 	public JacksonJsonDecoder() {
 		this(new ObjectMapper());
 	}
@@ -47,18 +49,22 @@ public class JacksonJsonDecoder implements ByteToMessageDecoder<Object> {
 		this.mapper = mapper;
 	}
 
+
 	@Override
 	public boolean canDecode(ResolvableType type, MediaType mediaType, Object... hints) {
 		return mediaType.isCompatibleWith(MediaType.APPLICATION_JSON);
 	}
 
 	@Override
-	public Publisher<Object> decode(Publisher<ByteBuffer> inputStream, ResolvableType type, MediaType mediaType, Object... hints) {
-		ObjectReader reader = mapper.readerFor(type.getRawClass());
+	public Publisher<Object> decode(Publisher<ByteBuffer> inputStream, ResolvableType type,
+			MediaType mediaType, Object... hints) {
+
+		ObjectReader reader = this.mapper.readerFor(type.getRawClass());
 		return Publishers.map(inputStream, chunk -> {
 			try {
 				return reader.readValue(new ByteBufferInputStream(chunk));
-			} catch (IOException e) {
+			}
+			catch (IOException e) {
 				throw new CodecException("Error while reading the data", e);
 			}
 		});

@@ -13,25 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.reactive.web.dispatch;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.reactivestreams.Publisher;
+import reactor.Publishers;
+
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.ReactiveServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 import org.springframework.reactive.web.http.HttpHandler;
-import org.springframework.reactive.web.http.ServerHttpRequest;
-import org.springframework.reactive.web.http.ServerHttpResponse;
-import reactor.Publishers;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Central dispatcher for HTTP request handlers/controllers. Dispatches to registered
@@ -70,20 +72,20 @@ public class DispatcherHandler implements HttpHandler, ApplicationContextAware {
 
 	protected void initStrategies(ApplicationContext context) {
 
-		Map<String, HandlerMapping> mappingBeans =
-				BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerMapping.class, true, false);
+		Map<String, HandlerMapping> mappingBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+				context, HandlerMapping.class, true, false);
 
 		this.handlerMappings = new ArrayList<>(mappingBeans.values());
 		AnnotationAwareOrderComparator.sort(this.handlerMappings);
 
-		Map<String, HandlerAdapter> adapterBeans =
-				BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerAdapter.class, true, false);
+		Map<String, HandlerAdapter> adapterBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+				context, HandlerAdapter.class, true, false);
 
 		this.handlerAdapters = new ArrayList<>(adapterBeans.values());
 		AnnotationAwareOrderComparator.sort(this.handlerAdapters);
 
-		Map<String, HandlerResultHandler> beans =
-				BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerResultHandler.class, true, false);
+		Map<String, HandlerResultHandler> beans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+				context, HandlerResultHandler.class, true, false);
 
 		this.resultHandlers = new ArrayList<>(beans.values());
 		AnnotationAwareOrderComparator.sort(this.resultHandlers);
@@ -91,8 +93,7 @@ public class DispatcherHandler implements HttpHandler, ApplicationContextAware {
 
 
 	@Override
-	public Publisher<Void> handle(ServerHttpRequest request, ServerHttpResponse response) {
-
+	public Publisher<Void> handle(ReactiveServerHttpRequest request, ReactiveServerHttpResponse response) {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Processing " + request.getMethod() + " request for [" + request.getURI() + "]");
 		}
@@ -106,24 +107,24 @@ public class DispatcherHandler implements HttpHandler, ApplicationContextAware {
 		}
 
 		HandlerAdapter handlerAdapter = getHandlerAdapter(handler);
+		if (handlerAdapter == null) {
+			return Publishers.error(new IllegalStateException("No HandlerAdapter for " + handler));
+		}
 
-		try {
-			HandlerResult result = handlerAdapter.handle(request, response, handler);
+		Publisher<HandlerResult> resultPublisher = handlerAdapter.handle(request, response, handler);
+
+		return Publishers.concatMap(resultPublisher, result -> {
 			for (HandlerResultHandler resultHandler : resultHandlers) {
 				if (resultHandler.supports(result)) {
 					return resultHandler.handleResult(request, response, result);
 				}
 			}
 			return Publishers.error(new IllegalStateException(
-			  "No HandlerResultHandler for " + result.getValue()));
-		}
-		catch(Exception ex) {
-			return Publishers.error(ex);
-		}
-
+					"No HandlerResultHandler for " + result.getValue()));
+		});
 	}
 
-	protected Object getHandler(ServerHttpRequest request) {
+	protected Object getHandler(ReactiveServerHttpRequest request) {
 		Object handler = null;
 		for (HandlerMapping handlerMapping : this.handlerMappings) {
 			handler = handlerMapping.getHandler(request);
@@ -140,8 +141,7 @@ public class DispatcherHandler implements HttpHandler, ApplicationContextAware {
 				return handlerAdapter;
 			}
 		}
-		// more specific exception
-		throw new IllegalStateException("No HandlerAdapter for " + handler);
+		return null;
 	}
 
 }

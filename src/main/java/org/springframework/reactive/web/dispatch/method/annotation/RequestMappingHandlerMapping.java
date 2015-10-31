@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.reactive.web.dispatch.method.annotation;
 
 import java.util.Arrays;
@@ -32,8 +33,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.server.ReactiveServerHttpRequest;
 import org.springframework.reactive.web.dispatch.HandlerMapping;
-import org.springframework.reactive.web.http.ServerHttpRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -92,14 +93,13 @@ public class RequestMappingHandlerMapping implements HandlerMapping,
 	}
 
 	@Override
-	public Object getHandler(ServerHttpRequest request) {
-		String path = request.getURI().getPath();
-		HttpMethod method = request.getMethod();
+	public Object getHandler(ReactiveServerHttpRequest request) {
 		for (Map.Entry<RequestMappingInfo, HandlerMethod> entry : this.methodMap.entrySet()) {
 			RequestMappingInfo info = entry.getKey();
-			if (path.equals(info.getPath()) && (info.getMethods().isEmpty() || info.getMethods().contains(RequestMethod.valueOf(method.name())))) {
+			if (info.matchesRequest(request)) {
 				if (logger.isDebugEnabled()) {
-					logger.debug("Mapped " + method + " " + path + " to [" + entry.getValue() + "]");
+					logger.debug("Mapped " + request.getMethod() + " " +
+							request.getURI().getPath() + " to [" + entry.getValue() + "]");
 				}
 				return entry.getValue();
 			}
@@ -119,6 +119,11 @@ public class RequestMappingHandlerMapping implements HandlerMapping,
 			this(path, asList(methods));
 		}
 
+		private static List<RequestMethod> asList(RequestMethod... requestMethods) {
+			return (requestMethods != null ?
+					Arrays.asList(requestMethods) : Collections.<RequestMethod>emptyList());
+		}
+
 		public RequestMappingInfo(String path, Collection<RequestMethod> methods) {
 			this.path = path;
 			this.methods = new TreeSet<>(methods);
@@ -126,20 +131,22 @@ public class RequestMappingHandlerMapping implements HandlerMapping,
 
 
 		public String getPath() {
-			return path;
+			return this.path;
 		}
 
 		public Set<RequestMethod> getMethods() {
-			return methods;
+			return this.methods;
 		}
 
-		private static List<RequestMethod> asList(RequestMethod... requestMethods) {
-			return (requestMethods != null ? Arrays.asList(requestMethods) : Collections.<RequestMethod>emptyList());
+		public boolean matchesRequest(ReactiveServerHttpRequest request) {
+			String httpMethod = request.getMethod().name();
+			return request.getURI().getPath().equals(getPath()) &&
+					(getMethods().isEmpty() || getMethods().contains(RequestMethod.valueOf(httpMethod)));
 		}
 
 		@Override
 		public int compareTo(Object o) {
-			RequestMappingInfo other = (RequestMappingInfo)o;
+			RequestMappingInfo other = (RequestMappingInfo) o;
 			if (!this.path.equals(other.getPath())) {
 				return -1;
 			}

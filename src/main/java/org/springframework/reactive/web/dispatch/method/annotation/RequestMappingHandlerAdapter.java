@@ -13,25 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.reactive.web.dispatch.method.annotation;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.reactivestreams.Publisher;
+import reactor.Publishers;
+
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.core.convert.ConversionService;
+import org.springframework.http.server.ReactiveServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 import org.springframework.reactive.codec.decoder.ByteBufferDecoder;
 import org.springframework.reactive.codec.decoder.ByteToMessageDecoder;
 import org.springframework.reactive.codec.decoder.JacksonJsonDecoder;
-import org.springframework.reactive.codec.decoder.JsonObjectDecoder;
 import org.springframework.reactive.codec.decoder.StringDecoder;
 import org.springframework.reactive.web.dispatch.HandlerAdapter;
 import org.springframework.reactive.web.dispatch.HandlerResult;
 import org.springframework.reactive.web.dispatch.method.HandlerMethodArgumentResolver;
 import org.springframework.reactive.web.dispatch.method.InvocableHandlerMethod;
-import org.springframework.reactive.web.http.ServerHttpRequest;
-import org.springframework.reactive.web.http.ServerHttpResponse;
 import org.springframework.web.method.HandlerMethod;
 
 
@@ -42,23 +45,37 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Initializin
 
 	private List<HandlerMethodArgumentResolver> argumentResolvers;
 
+	private ConversionService conversionService;
 
-	public void setHandlerMethodArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+
+	public void setArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
 		this.argumentResolvers.clear();
 		this.argumentResolvers.addAll(resolvers);
+	}
+
+	public List<HandlerMethodArgumentResolver> getArgumentResolvers() {
+		return this.argumentResolvers;
+	}
+
+	public void setConversionService(ConversionService conversionService) {
+		this.conversionService = conversionService;
+	}
+
+	public ConversionService getConversionService() {
+		return this.conversionService;
 	}
 
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		if (this.argumentResolvers == null) {
+
+			List<ByteToMessageDecoder<?>> decoders = Arrays.asList(new ByteBufferDecoder(),
+					new StringDecoder(), new JacksonJsonDecoder());
+
 			this.argumentResolvers = new ArrayList<>();
 			this.argumentResolvers.add(new RequestParamArgumentResolver());
-			List<ByteToMessageDecoder<?>> deserializers = Arrays.asList(new ByteBufferDecoder(),
-					new StringDecoder(), new JacksonJsonDecoder());
-			List<ByteToMessageDecoder<ByteBuffer>> preProcessors = Arrays.asList(new JsonObjectDecoder());
-			this.argumentResolvers.add(new RequestBodyArgumentResolver(deserializers,
-					new DefaultConversionService(), preProcessors));
+			this.argumentResolvers.add(new RequestBodyArgumentResolver(decoders, this.conversionService));
 		}
 	}
 
@@ -68,15 +85,14 @@ public class RequestMappingHandlerAdapter implements HandlerAdapter, Initializin
 	}
 
 	@Override
-	public HandlerResult handle(ServerHttpRequest request, ServerHttpResponse response,
-			Object handler) throws Exception {
+	public Publisher<HandlerResult> handle(ReactiveServerHttpRequest request,
+			ReactiveServerHttpResponse response, Object handler) {
 
-		final InvocableHandlerMethod invocable = new InvocableHandlerMethod((HandlerMethod) handler);
-		invocable.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+		InvocableHandlerMethod handlerMethod = new InvocableHandlerMethod((HandlerMethod) handler);
+		handlerMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
 
-		Object result = invocable.invokeForRequest(request);
-
-		return new HandlerResult(invocable, result);
+		Publisher<Object> resultPublisher = handlerMethod.invokeForRequest(request);
+		return Publishers.map(resultPublisher, result -> new HandlerResult(handlerMethod, result));
 	}
 
 }

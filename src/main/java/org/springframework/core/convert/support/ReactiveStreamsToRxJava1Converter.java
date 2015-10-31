@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2011-2015 Pivotal Software Inc, All Rights Reserved.
+ * Copyright 2002-2015 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,28 +36,30 @@ public final class ReactiveStreamsToRxJava1Converter implements GenericConverter
 
 	@Override
 	public Set<GenericConverter.ConvertiblePair> getConvertibleTypes() {
-		Set<GenericConverter.ConvertiblePair> convertibleTypes = new LinkedHashSet<>();
-		convertibleTypes.add(new GenericConverter.ConvertiblePair(Publisher.class, Observable.class));
-		convertibleTypes.add(new GenericConverter.ConvertiblePair(Observable.class, Publisher.class));
-		convertibleTypes.add(new GenericConverter.ConvertiblePair(Publisher.class, Single.class));
-		convertibleTypes.add(new GenericConverter.ConvertiblePair(Single.class, Publisher.class));
-		return convertibleTypes;
+		Set<GenericConverter.ConvertiblePair> pairs = new LinkedHashSet<>();
+		pairs.add(new GenericConverter.ConvertiblePair(Publisher.class, Observable.class));
+		pairs.add(new GenericConverter.ConvertiblePair(Observable.class, Publisher.class));
+		pairs.add(new GenericConverter.ConvertiblePair(Publisher.class, Single.class));
+		pairs.add(new GenericConverter.ConvertiblePair(Single.class, Publisher.class));
+		return pairs;
 	}
 
 	@Override
 	public Object convert(Object source, TypeDescriptor sourceType, TypeDescriptor targetType) {
-		if (source != null) {
-			if (Observable.class.isAssignableFrom(source.getClass())) {
-				return RxJava1Converter.from((Observable) source);
-			}
-			else if (Observable.class.isAssignableFrom(targetType.getResolvableType().getRawClass())) {
-				return RxJava1Converter.from((Publisher)source);
-			}
-			else if (Single.class.isAssignableFrom(source.getClass())) {
-				return reactor.core.publisher.convert.RxJava1SingleConverter.from((Single) source);
-			} else if (Single.class.isAssignableFrom(targetType.getResolvableType().getRawClass())) {
-				return reactor.core.publisher.convert.RxJava1SingleConverter.from((Publisher)source);
-			}
+		if (source == null) {
+			return null;
+		}
+		if (Observable.class.isAssignableFrom(source.getClass())) {
+			return RxJava1Converter.from((Observable) source);
+		}
+		else if (Observable.class.isAssignableFrom(targetType.getResolvableType().getRawClass())) {
+			return RxJava1Converter.from((Publisher) source);
+		}
+		else if (Single.class.isAssignableFrom(source.getClass())) {
+			return reactor.core.publisher.convert.RxJava1SingleConverter.from((Single) source);
+		}
+		else if (Single.class.isAssignableFrom(targetType.getResolvableType().getRawClass())) {
+			return reactor.core.publisher.convert.RxJava1SingleConverter.from((Publisher) source);
 		}
 		return null;
 	}

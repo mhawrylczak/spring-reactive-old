@@ -18,36 +18,42 @@ package org.springframework.reactive.web.dispatch.method.annotation;
 
 import java.util.Collections;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 import org.reactivestreams.Publisher;
 
+import org.springframework.core.convert.support.DefaultConversionService;
+import org.springframework.reactive.codec.encoder.StringEncoder;
 import org.springframework.reactive.web.dispatch.HandlerResult;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.method.HandlerMethod;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author Sebastien Deleuze
  */
 public class ResponseBodyResultHandlerTests {
 
+
 	@Test
 	public void supports() throws NoSuchMethodException {
-		ResponseBodyResultHandler resultHandler = new ResponseBodyResultHandler(Collections.emptyList());
+		ResponseBodyResultHandler handler = new ResponseBodyResultHandler(Collections.singletonList(
+				new StringEncoder()), new DefaultConversionService());
 		TestController controller = new TestController();
 
-		HandlerMethod notAnnotatedMethod = new HandlerMethod(controller, TestController.class.getMethod("notAnnotated"));
-		assertFalse(resultHandler.supports(new HandlerResult(notAnnotatedMethod, null)));
+		HandlerMethod hm = new HandlerMethod(controller,TestController.class.getMethod("notAnnotated"));
+		assertFalse(handler.supports(new HandlerResult(hm, null)));
 
-		HandlerMethod publisherStringMethod = new HandlerMethod(controller, TestController.class.getMethod("publisherString"));
-		assertTrue(resultHandler.supports(new HandlerResult(publisherStringMethod, null)));
+		hm = new HandlerMethod(controller, TestController.class.getMethod("publisherString"));
+		assertTrue(handler.supports(new HandlerResult(hm, null)));
 
-		HandlerMethod publisherVoidMethod = new HandlerMethod(controller, TestController.class.getMethod("publisherVoid"));
-		assertTrue(resultHandler.supports(new HandlerResult(publisherVoidMethod, null)));
+		hm = new HandlerMethod(controller, TestController.class.getMethod("publisherVoid"));
+		assertTrue(handler.supports(new HandlerResult(hm, null)));
 	}
 
 
+	@SuppressWarnings("unused")
 	private static class TestController {
 
 		public Publisher<String> notAnnotated() {

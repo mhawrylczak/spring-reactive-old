@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.reactive.web.http.servlet;
 
 import java.net.URI;
@@ -21,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Enumeration;
 import java.util.Map;
-
 import javax.servlet.http.HttpServletRequest;
 
 import org.reactivestreams.Publisher;
@@ -29,7 +29,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.reactive.web.http.ServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpRequest;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.StringUtils;
@@ -37,7 +37,7 @@ import org.springframework.util.StringUtils;
 /**
  * @author Rossen Stoyanchev
  */
-public class ServletServerHttpRequest implements ServerHttpRequest {
+public class ServletServerHttpRequest implements ReactiveServerHttpRequest {
 
 	private final HttpServletRequest servletRequest;
 
@@ -46,7 +46,9 @@ public class ServletServerHttpRequest implements ServerHttpRequest {
 	private HttpHeaders headers;
 
 
-	public ServletServerHttpRequest(HttpServletRequest servletRequest, Publisher<ByteBuffer> requestBodyPublisher) {
+	public ServletServerHttpRequest(HttpServletRequest servletRequest,
+			Publisher<ByteBuffer> requestBodyPublisher) {
+
 		Assert.notNull(servletRequest, "HttpServletRequest must not be null");
 		this.servletRequest = servletRequest;
 		this.requestBodyPublisher = requestBodyPublisher;
@@ -74,8 +76,8 @@ public class ServletServerHttpRequest implements ServerHttpRequest {
 	public HttpHeaders getHeaders() {
 		if (this.headers == null) {
 			this.headers = new HttpHeaders();
-			for (Enumeration<?> headerNames = this.servletRequest.getHeaderNames(); headerNames.hasMoreElements(); ) {
-				String headerName = (String) headerNames.nextElement();
+			for (Enumeration<?> names = this.servletRequest.getHeaderNames(); names.hasMoreElements(); ) {
+				String headerName = (String) names.nextElement();
 				for (Enumeration<?> headerValues = this.servletRequest.getHeaders(headerName);
 					 headerValues.hasMoreElements(); ) {
 					String headerValue = (String) headerValues.nextElement();

@@ -16,7 +16,19 @@
 
 package org.springframework.reactive.codec.encoder;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.MarshalException;
+import javax.xml.bind.Marshaller;
+
 import org.reactivestreams.Publisher;
+import reactor.Publishers;
+import reactor.io.buffer.Buffer;
+
 import org.springframework.core.ResolvableType;
 import org.springframework.http.MediaType;
 import org.springframework.reactive.codec.CodecException;
@@ -24,17 +36,6 @@ import org.springframework.reactive.codec.decoder.Jaxb2Decoder;
 import org.springframework.reactive.io.BufferOutputStream;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
-import reactor.Publishers;
-import reactor.io.buffer.Buffer;
-
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.MarshalException;
-import javax.xml.bind.Marshaller;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Encode from an {@code Object} stream to a byte stream of XML elements.
@@ -44,15 +45,19 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class Jaxb2Encoder implements MessageToByteEncoder<Object> {
 
-	private final ConcurrentMap<Class<?>, JAXBContext> jaxbContexts = new ConcurrentHashMap<Class<?>, JAXBContext>(64);
+	private final ConcurrentMap<Class<?>, JAXBContext> jaxbContexts = new ConcurrentHashMap<>(64);
+
 
 	@Override
 	public boolean canEncode(ResolvableType type, MediaType mediaType, Object... hints) {
-		return mediaType.isCompatibleWith(MediaType.APPLICATION_XML) || mediaType.isCompatibleWith(MediaType.TEXT_XML);
+		return (mediaType.isCompatibleWith(MediaType.APPLICATION_XML) ||
+				mediaType.isCompatibleWith(MediaType.TEXT_XML));
 	}
 
 	@Override
-	public Publisher<ByteBuffer> encode(Publisher<? extends Object> messageStream, ResolvableType type, MediaType mediaType, Object... hints) {
+	public Publisher<ByteBuffer> encode(Publisher<? extends Object> messageStream, ResolvableType type,
+			MediaType mediaType, Object... hints) {
+
 		return Publishers.map(messageStream, value -> {
 			try {
 				Buffer buffer = new Buffer();
@@ -63,12 +68,12 @@ public class Jaxb2Encoder implements MessageToByteEncoder<Object> {
 				marshaller.marshal(value, outputStream);
 				buffer.flip();
 				return buffer.byteBuffer();
-			} catch (MarshalException ex) {
-				throw new CodecException(
-				  "Could not marshal [" + value + "]: " + ex.getMessage(), ex);
-			} catch (JAXBException ex) {
-				throw new CodecException(
-				  "Could not instantiate JAXBContext: " + ex.getMessage(), ex);
+			}
+			catch (MarshalException ex) {
+				throw new CodecException("Could not marshal [" + value + "]: " + ex.getMessage(), ex);
+			}
+			catch (JAXBException ex) {
+				throw new CodecException("Could not instantiate JAXBContext: " + ex.getMessage(), ex);
 			}
 		});
 	}
@@ -76,12 +81,11 @@ public class Jaxb2Encoder implements MessageToByteEncoder<Object> {
 	protected final Marshaller createMarshaller(Class<?> clazz) {
 		try {
 			JAXBContext jaxbContext = getJaxbContext(clazz);
-			Marshaller marshaller = jaxbContext.createMarshaller();
-			return marshaller;
+			return jaxbContext.createMarshaller();
 		}
 		catch (JAXBException ex) {
-			throw new CodecException(
-					"Could not create Marshaller for class [" + clazz + "]: " + ex.getMessage(), ex);
+			throw new CodecException("Could not create Marshaller for class " +
+					"[" + clazz + "]: " + ex.getMessage(), ex);
 		}
 	}
 
@@ -94,8 +98,8 @@ public class Jaxb2Encoder implements MessageToByteEncoder<Object> {
 				this.jaxbContexts.putIfAbsent(clazz, jaxbContext);
 			}
 			catch (JAXBException ex) {
-				throw new CodecException(
-						"Could not instantiate JAXBContext for class [" + clazz + "]: " + ex.getMessage(), ex);
+				throw new CodecException("Could not instantiate JAXBContext for class " +
+						"[" + clazz + "]: " + ex.getMessage(), ex);
 			}
 		}
 		return jaxbContext;

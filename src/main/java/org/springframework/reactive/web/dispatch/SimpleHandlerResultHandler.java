@@ -22,8 +22,8 @@ import org.reactivestreams.Publisher;
 import reactor.Publishers;
 
 import org.springframework.core.Ordered;
-import org.springframework.reactive.web.http.ServerHttpRequest;
-import org.springframework.reactive.web.http.ServerHttpResponse;
+import org.springframework.http.server.ReactiveServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 
 /**
  * Supports {@link HandlerResult} with a {@code Publisher<Void>} value.
@@ -33,6 +33,11 @@ import org.springframework.reactive.web.http.ServerHttpResponse;
 public class SimpleHandlerResultHandler implements Ordered, HandlerResultHandler {
 
 	private int order = Ordered.LOWEST_PRECEDENCE;
+
+
+	public void setOrder(int order) {
+		this.order = order;
+	}
 
 	@Override
 	public int getOrder() {
@@ -46,9 +51,10 @@ public class SimpleHandlerResultHandler implements Ordered, HandlerResultHandler
 	}
 
 	@Override
-	public Publisher<Void> handleResult(ServerHttpRequest request, ServerHttpResponse response, HandlerResult result) {
-		Publisher<Void> handleComplete = Publishers.completable((Publisher<?>)result.getValue());
-		return Publishers.concat(Publishers.from(Arrays.asList(handleComplete, response.writeHeaders())));
-	}
+	public Publisher<Void> handleResult(ReactiveServerHttpRequest request,
+			ReactiveServerHttpResponse response, HandlerResult result) {
 
+		Publisher<Void> completion = Publishers.completable((Publisher<?>)result.getValue());
+		return Publishers.concat(Publishers.from(Arrays.asList(completion, response.writeHeaders())));
+	}
 }

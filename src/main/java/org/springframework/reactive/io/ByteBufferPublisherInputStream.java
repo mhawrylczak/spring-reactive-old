@@ -16,15 +16,16 @@
 
 package org.springframework.reactive.io;
 
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
-import org.springframework.util.Assert;
-import reactor.Publishers;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
+
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
+import reactor.Publishers;
+
+import org.springframework.util.Assert;
 
 /**
  * {@code InputStream} implementation based on a byte array {@link Publisher}.
@@ -129,7 +130,8 @@ public class ByteBufferPublisherInputStream extends InputStream {
 			if (this.currentStream != null && this.currentStream.available() > 0) {
 				return this.currentStream;
 			} else {
-				// take() blocks until next or complete() then return null, but that's OK since this is a *blocking* InputStream
+				// take() blocks until next or complete() then return null,
+				// but that's OK since this is a *blocking* InputStream
 				ByteBuffer signal = this.queue.take();
 				if(signal == null){
 					this.completed = true;
