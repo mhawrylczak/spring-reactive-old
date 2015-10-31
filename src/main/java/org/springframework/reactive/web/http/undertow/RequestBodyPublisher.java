@@ -21,7 +21,6 @@ import io.undertow.util.SameThreadExecutor;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.springframework.reactive.util.DemandCounter;
 import org.xnio.ChannelListener;
 import org.xnio.Pooled;
 import org.xnio.channels.StreamSourceChannel;
@@ -29,6 +28,7 @@ import reactor.core.support.BackpressureUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import static java.util.Objects.requireNonNull;
 import static org.xnio.IoUtils.safeClose;
@@ -40,6 +40,9 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
     private final HttpServerExchange exchange;
     private Subscriber<? super ByteBuffer> subscriber;
+
+    static final AtomicLongFieldUpdater<RequestBodySubscription> DEMAND =
+            AtomicLongFieldUpdater.newUpdater(RequestBodySubscription.class, "demand");
 
     public RequestBodyPublisher(HttpServerExchange exchange) {
         requireNonNull(exchange);
@@ -60,7 +63,8 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
     private class RequestBodySubscription implements Subscription, Runnable, ChannelListener<StreamSourceChannel> {
         private Pooled<ByteBuffer> pooledBuffer;
         private StreamSourceChannel channel;
-        private final DemandCounter demand = new DemandCounter();
+        volatile long demand;
+
 
         private boolean subscriptionClosed;
         private boolean signalInProgress;
@@ -79,7 +83,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                 return;
             }
 
-            demand.increase(n);
+            BackpressureUtils.getAndAdd(DEMAND, this, n);
             scheduleNextSignal();
         }
 
@@ -127,11 +131,11 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
             if (subscriptionClosed || signalInProgress) {
                 return;
             }
-            if (!demand.hasDemand()) {
+
+            if (0 == BackpressureUtils.getAndSub(DEMAND, this, 1)) {
                 return;
             }
 
-            demand.decrement();
             signalInProgress = true;
 
             if (channel == null) {
@@ -158,11 +162,13 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                         doOnComplete();
                     } else {
                         if (buffer.remaining() == 0) {
-                            if (!demand.hasDemand()) {
+                            if (demand == 0) {
                                 channel.suspendReads();
                             }
                             doOnNext(buffer);
-                            scheduleNextSignal();
+                            if (demand > 0) {
+                                scheduleNextSignal();
+                            }
                             break;
                         }
                     }
@@ -186,15 +192,19 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                     if (count == 0) {
                         return;
                     } else if (count == -1) {
-                        doOnNext(buffer);
+                        if (buffer.position() > 0) {
+                            doOnNext(buffer);
+                        }
                         doOnComplete();
                     } else {
                         if (buffer.remaining() == 0) {
-                            if (!demand.hasDemand()) {
+                            if (demand == 0) {
                                 channel.suspendReads();
                             }
                             doOnNext(buffer);
-                            scheduleNextSignal();
+                            if (demand > 0) {
+                                scheduleNextSignal();
+                            }
                         }
                     }
                 } while (count > 0 && signalInProgress);
