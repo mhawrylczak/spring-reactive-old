@@ -36,7 +36,7 @@ import static org.xnio.IoUtils.safeClose;
 /**
  * @author Marek Hawrylczak
  */
-public class RequestBodyPublisher implements Publisher<ByteBuffer> {
+class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
     private final HttpServerExchange exchange;
     private Subscriber<? super ByteBuffer> subscriber;
@@ -48,8 +48,8 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
     @Override
     public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
-        requireNonNull(exchange);
-        if (subscriber != null) {
+        requireNonNull(subscriber);
+        if (this.subscriber != null) {
             subscriber.onError(new IllegalStateException("Only one subscriber allowed"));
         }
 

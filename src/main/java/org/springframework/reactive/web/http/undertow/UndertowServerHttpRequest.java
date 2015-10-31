@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
 /**
  * @author Marek Hawrylczak
  */
-public class UndertowServerHttpRequest implements ServerHttpRequest {
+class UndertowServerHttpRequest implements ServerHttpRequest {
 
     private final HttpServerExchange exchange;
 

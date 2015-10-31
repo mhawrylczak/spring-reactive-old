@@ -22,17 +22,19 @@ import org.apache.commons.logging.LogFactory;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.xnio.ChannelListener;
-import org.xnio.ChannelListeners;
 import org.xnio.IoUtils;
 import org.xnio.channels.StreamSinkChannel;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import static org.xnio.ChannelListeners.closingChannelExceptionHandler;
+import static org.xnio.ChannelListeners.flushingChannelListener;
+
 /**
  * @author Marek Hawrylczak
  */
-public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<StreamSinkChannel> {
+class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<StreamSinkChannel> {
 
     private static final Log logger = LogFactory.getLog(ResponseBodySubscriber.class);
 
@@ -86,7 +88,6 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
             } while (buffer.hasRemaining() && c > 0);
             if (buffer.hasRemaining()) {
                 channel.resumeWrites();
-                return;
             } else {
                 this.subscription.request(1);
             }
@@ -113,12 +114,10 @@ public class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelLi
             channel.shutdownWrites();
 
             if (!channel.flush()) {
-                channel.getWriteSetter().set(ChannelListeners.flushingChannelListener(new ChannelListener<StreamSinkChannel>() {
-                    @Override
-                    public void handleEvent(StreamSinkChannel o) {
-                        IoUtils.safeClose(channel);
-                    }
-                }, ChannelListeners.closingChannelExceptionHandler()));
+                channel.getWriteSetter().set(
+                        flushingChannelListener(
+                                o -> IoUtils.safeClose(channel),
+                                closingChannelExceptionHandler()));
                 channel.resumeWrites();
 
             }

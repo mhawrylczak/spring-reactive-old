@@ -31,7 +31,7 @@ import java.util.Map;
 /**
  * @author Marek Hawrylczak
  */
-public class UndertowServerHttpResponse implements ServerHttpResponse {
+class UndertowServerHttpResponse implements ServerHttpResponse {
     private final HttpServerExchange exchange;
     private final HttpHeaders headers;
 

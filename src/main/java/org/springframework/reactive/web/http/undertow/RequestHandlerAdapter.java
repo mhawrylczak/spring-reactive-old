@@ -29,7 +29,7 @@ import org.springframework.util.Assert;
 /**
  * @author Marek Hawrylczak
  */
-public class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
+class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
 
     private final Logger LOG = LoggerFactory.getLogger(RequestHandlerAdapter.class);
 
