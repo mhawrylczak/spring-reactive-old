@@ -28,7 +28,7 @@ public class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
         ServerHttpRequest request = new UndertowServerHttpRequest(exchange, requestBodyPublisher);
         ResponseBodySubscriber responseBodySubscriber = new ResponseBodySubscriber(exchange);
         ServerHttpResponse response = new UndertowServerHttpResponse(exchange, responseBodySubscriber);
-        exchange.dispatch();//TODO do not dispatch if resumed
+        exchange.dispatch();
         httpHandler.handle(request, response).subscribe(new Subscriber<Void>() {
             @Override
             public void onSubscribe(Subscription s) {
@@ -53,6 +53,5 @@ public class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
                 LOG.debug("onComplete");
             }
         });
-//        if(exchange.isRequestComplete())
     }
 }
