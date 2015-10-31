@@ -1,7 +1,22 @@
+/*
+ * Copyright 2002-2015 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.springframework.reactive.web.http.undertow;
 
 import io.undertow.server.HttpServerExchange;
-import io.undertow.util.HeaderMap;
 import io.undertow.util.HeaderValues;
 import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
@@ -13,7 +28,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 
-
+/**
+ * @author Marek Hawrylczak
+ */
 public class UndertowServerHttpRequest implements ServerHttpRequest {
 
     private final HttpServerExchange exchange;
@@ -41,7 +58,7 @@ public class UndertowServerHttpRequest implements ServerHttpRequest {
     public URI getURI() {
         try {
             StringBuilder uri = new StringBuilder(exchange.getRequestPath());
-            if (StringUtils.hasLength(exchange.getQueryString())){
+            if (StringUtils.hasLength(exchange.getQueryString())) {
                 uri.append('?').append(exchange.getQueryString());
             }
             return new URI(uri.toString());
@@ -54,8 +71,8 @@ public class UndertowServerHttpRequest implements ServerHttpRequest {
     public HttpHeaders getHeaders() {
         if (this.headers == null) {
             this.headers = new HttpHeaders();
-            for(HeaderValues headerValues : exchange.getRequestHeaders()){
-                for(String value : headerValues ){
+            for (HeaderValues headerValues : exchange.getRequestHeaders()) {
+                for (String value : headerValues) {
                     this.headers.add(headerValues.getHeaderName().toString(), value);
                 }
             }
