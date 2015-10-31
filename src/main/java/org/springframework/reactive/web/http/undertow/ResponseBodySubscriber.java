@@ -23,10 +23,13 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.xnio.ChannelListener;
 import org.xnio.IoUtils;
+import org.xnio.Pooled;
 import org.xnio.channels.StreamSinkChannel;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.xnio.ChannelListeners.closingChannelExceptionHandler;
 import static org.xnio.ChannelListeners.flushingChannelListener;
@@ -39,15 +42,15 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
     private static final Log logger = LogFactory.getLog(ResponseBodySubscriber.class);
 
     private final HttpServerExchange exchange;
+    private final Queue<Pooled<ByteBuffer>> buffers;
 
     private Subscription subscription;
-
-    private ByteBuffer buffer;
 
     private StreamSinkChannel responseChannel;
 
     public ResponseBodySubscriber(HttpServerExchange exchange) {
         this.exchange = exchange;
+        this.buffers = new ConcurrentLinkedQueue<>();
     }
 
     @Override
@@ -57,8 +60,7 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
     }
 
     @Override
-    public void onNext(ByteBuffer bytes) {
-        this.buffer = bytes;
+    public void onNext(ByteBuffer buffer) {
         if (responseChannel == null) {
             responseChannel = exchange.getResponseChannel();
         }
@@ -68,6 +70,7 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
                 c = responseChannel.write(buffer);
             } while (buffer.hasRemaining() && c > 0);
             if (buffer.hasRemaining()) {
+                enqueue(buffer);
                 responseChannel.getWriteSetter().set(this);
                 responseChannel.resumeWrites();
             } else {
@@ -79,14 +82,37 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
         }
     }
 
+    private void enqueue(ByteBuffer src) {
+        do {
+            Pooled<ByteBuffer> pooledBuffer = exchange.getConnection().getBufferPool().allocate();
+            ByteBuffer dst = pooledBuffer.getResource();
+            copy(dst, src);
+            dst.flip();
+            buffers.add(pooledBuffer);
+        } while (src.remaining() > 0);
+    }
+
+    private void copy(ByteBuffer dst, ByteBuffer src) {
+        int n = Math.min(dst.capacity(), src.remaining());
+        for (int i = 0; i < n; i++) {
+            dst.put(src.get());
+        }
+    }
+
     @Override
     public void handleEvent(StreamSinkChannel channel) {
         try {
             int c;
             do {
-                c = channel.write(buffer);
-            } while (buffer.hasRemaining() && c > 0);
-            if (buffer.hasRemaining()) {
+                ByteBuffer buffer = buffers.peek().getResource();
+                do {
+                    c = channel.write(buffer);
+                } while (buffer.hasRemaining() && c > 0);
+                if (!buffer.hasRemaining()) {
+                    buffers.remove().free();
+                }
+            } while (!buffers.isEmpty() && c > 0);
+            if (!buffers.isEmpty()) {
                 channel.resumeWrites();
             } else {
                 this.subscription.request(1);
