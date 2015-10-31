@@ -113,7 +113,6 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
                 return;
             }
             if(!demand.hasDemand()){
-                //TODO  suspned channel ?
                 return;
             }
 
@@ -130,7 +129,6 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
             ByteBuffer buffer = pooledBuffer.getResource();
             buffer.clear();
 
-
             try {
                 int count;
                 do {
@@ -145,6 +143,9 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
                         doOnComplete();
                     } else {
                         if (buffer.remaining() == 0){
+                            if (!demand.hasDemand()) {
+                                channel.suspendReads();
+                            }
                             doOnNext(buffer);
                             scheduleNextSignal();
                             break;
@@ -175,6 +176,9 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
                         doOnComplete();
                     } else {
                         if (buffer.remaining() == 0){
+                            if (!demand.hasDemand()) {
+                                channel.suspendReads();
+                            }
                             doOnNext(buffer);
                             scheduleNextSignal();
                         }
