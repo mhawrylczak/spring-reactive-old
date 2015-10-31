@@ -1,17 +1,16 @@
 package org.springframework.reactive.web.http.undertow;
 
 import io.undertow.server.HttpServerExchange;
+import io.undertow.util.SameThreadExecutor;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.springframework.reactive.util.DemandCounter;
 import org.xnio.ChannelListener;
-import org.xnio.IoUtils;
-import org.xnio.Pool;
 import org.xnio.Pooled;
 import org.xnio.channels.StreamSourceChannel;
 import reactor.core.support.BackpressureUtils;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -22,9 +21,7 @@ import static org.xnio.IoUtils.safeClose;
 public class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
     private final HttpServerExchange exchange;
-
     private Subscriber<? super ByteBuffer> subscriber;
-    private boolean cancelled;
 
     public RequestBodyPublisher(HttpServerExchange exchange) {
         requireNonNull(exchange);
@@ -42,57 +39,121 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
         this.subscriber.onSubscribe(new RequestBodySubscription());
     }
 
-    private class RequestBodySubscription implements Subscription, Closeable, ChannelListener<StreamSourceChannel> {
+    private class RequestBodySubscription implements Subscription , Runnable, ChannelListener<StreamSourceChannel> {
         private Pooled<ByteBuffer> pooledBuffer;
-        private ByteBuffer buffer;
         private StreamSourceChannel channel;
-        private long demand = 0; //TODO demand is not respected now
-        private long messagesCount = 0;
+        private final DemandCounter demand = new DemandCounter();
+        private boolean cancelled;
+        private boolean signalInProgress;
+        private boolean complete;
 
-        public RequestBodySubscription() {
-            this.pooledBuffer = exchange.getConnection().getBufferPool().allocate();
-            this.buffer = pooledBuffer.getResource();
-            this.channel = exchange.getRequestChannel();
+        @Override
+        public void cancel() {
+            cancelled = true;
         }
 
         @Override
         public void request(long n) {
             BackpressureUtils.checkRequest(n, subscriber);
 
-            if (cancelled || channel == null) {
+            if (cancelled) {
                 return;
             }
-            demand += n;
 
-            try {
-                int r;
-                do {
-                    r = channel.read(buffer);
-                    if (r == 0) {
-                        channel.getReadSetter().set(this);
-                        channel.resumeReads();
-                    } else if (r == -1) {
-                        closeChannel();
-                        if (buffer.position() > 0){
-                            buffer.flip();
-                            subscriber.onNext(buffer);
-                            buffer.clear();
-                        }
-                        subscriber.onComplete();
-                        safeClose(this);
-                    } else {
-                        if (buffer.remaining() == 0){
-                            buffer.flip();
-                            subscriber.onNext(buffer);
-                            buffer.clear();
-                        }
-                    }
-                } while (r > 0);
-            } catch (IOException e) {
-                subscriber.onError(e);
-                safeClose(this);
+            demand.increase(n);
+            scheduleNextSignal();
+        }
+
+        private void scheduleNextSignal() {
+            exchange.dispatch(exchange.isInIoThread() ? SameThreadExecutor.INSTANCE : exchange.getIoThread(), this);
+        }
+
+        public boolean isSignalInProgress() {
+            return signalInProgress;
+        }
+
+        public boolean isComplete() {
+            return complete;
+        }
+
+        private void doOnNext(ByteBuffer buffer){
+            buffer.flip();
+            subscriber.onNext(buffer);
+            signalInProgress = false;
+        }
+
+        private void doOnComplete(){
+            subscriber.onComplete();
+            signalInProgress = false;
+            complete = true;
+            close();
+        }
+
+        private void doOnError(Throwable t){
+            subscriber.onError(t);
+            signalInProgress = false;
+            complete = true;
+            close();
+        }
+
+        private void close(){
+            if (pooledBuffer != null) {
+                pooledBuffer.free();
+                pooledBuffer = null;
+            }
+            if (channel != null) {
+                safeClose(channel);
+                channel = null;
+            }
+        }
+
+        @Override
+        public void run() {
+            if (cancelled || signalInProgress){
+                return;
+            }
+            if(!demand.hasDemand()){
+                //TODO  suspned channel ?
+                return;
             }
 
+            demand.decrement();
+            signalInProgress = true;
+
+            if (channel == null){
+                this.channel = exchange.getRequestChannel();
+            }
+            if (pooledBuffer == null){
+                this.pooledBuffer = exchange.getConnection().getBufferPool().allocate();
+            }
+
+            ByteBuffer buffer = pooledBuffer.getResource();
+            buffer.clear();
+
+
+            try {
+                int count;
+                do {
+                    count = channel.read(buffer);
+                    if (count == 0) {
+                        channel.getReadSetter().set(this);
+                        channel.resumeReads();
+                    } else if (count == -1) {
+                        if (buffer.position() > 0){
+                           doOnNext(buffer);
+                        }
+                        doOnComplete();
+                    } else {
+                        if (buffer.remaining() == 0){
+                            doOnNext(buffer);
+                            scheduleNextSignal();
+                            break;
+                        }
+                    }
+                } while (count > 0 && isSignalInProgress());
+            } catch (IOException e) {
+                doOnError(e);
+            }
         }
 
         @Override
@@ -101,57 +162,27 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
                 return;
             }
 
+            ByteBuffer buffer = pooledBuffer.getResource();
+
             try {
-                int r;
+                int count;
                 do {
-                    r = channel.read(buffer);
-                    if (r == 0) {
+                    count = channel.read(buffer);
+                    if (count == 0) {
                         return;
-                    } else if (r == -1) {
-                        closeChannel();
-                        buffer.flip();
-                        subscriber.onNext(buffer);
-                        subscriber.onComplete();
-                        safeClose(this);
+                    } else if (count == -1) {
+                        doOnNext(buffer);
+                        doOnComplete();
                     } else {
                         if (buffer.remaining() == 0){
-                            buffer.flip();
-                            subscriber.onNext(buffer);
-                            buffer.clear();
+                            doOnNext(buffer);
+                            scheduleNextSignal();
                         }
                     }
-                } while (r > 0);
+                } while (count > 0 && isSignalInProgress());
             } catch (IOException e) {
-                subscriber.onError(e);
-                safeClose(this);
+                doOnError(e);
             }
         }
-
-        @Override
-        public void cancel() {
-            if (cancelled) {
-                return;
-            }
-            cancelled = true;
-            safeClose(this);
-        }
-
-        private void closeChannel(){
-            if (channel != null) {
-                safeClose(channel);
-                channel = null;
-            }
-        }
-
-        @Override
-        public void close() throws IOException {
-            closeChannel();
-            if (pooledBuffer != null) {
-                pooledBuffer.free();
-                pooledBuffer = null;
-                buffer = null;
-            }
-        }
-
     }
 }
