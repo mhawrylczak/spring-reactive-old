@@ -172,7 +172,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                             break;
                         }
                     }
-                } while (count > 0 && signalInProgress);
+                } while (count > 0);
             } catch (IOException e) {
                 doOnError(e);
             }
@@ -205,9 +205,10 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                             if (demand > 0) {
                                 scheduleNextSignal();
                             }
+                            break;
                         }
                     }
-                } while (count > 0 && signalInProgress);
+                } while (count > 0);
             } catch (IOException e) {
                 doOnError(e);
             }
