@@ -21,7 +21,7 @@ import io.undertow.util.HeaderValues;
 import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.reactive.web.http.ServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpRequest;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
 /**
  * @author Marek Hawrylczak
  */
-class UndertowServerHttpRequest implements ServerHttpRequest {
+class UndertowServerHttpRequest implements ReactiveServerHttpRequest {
 
     private final HttpServerExchange exchange;
 

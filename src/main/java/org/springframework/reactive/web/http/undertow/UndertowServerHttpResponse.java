@@ -21,7 +21,7 @@ import io.undertow.util.HttpString;
 import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.reactive.web.http.ServerHttpResponse;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 import reactor.Publishers;
 
 import java.nio.ByteBuffer;
@@ -31,7 +31,7 @@ import java.util.Map;
 /**
  * @author Marek Hawrylczak
  */
-class UndertowServerHttpResponse implements ServerHttpResponse {
+class UndertowServerHttpResponse implements ReactiveServerHttpResponse {
     private final HttpServerExchange exchange;
     private final HttpHeaders headers;
 
@@ -51,7 +51,7 @@ class UndertowServerHttpResponse implements ServerHttpResponse {
     }
 
     @Override
-    public Publisher<Void> writeWith(Publisher<ByteBuffer> contentPublisher) {
+    public Publisher<Void> setBody(Publisher<ByteBuffer> contentPublisher) {
         applyHeaders();
         return (s -> contentPublisher.subscribe(responseBodySubscriber));
     }

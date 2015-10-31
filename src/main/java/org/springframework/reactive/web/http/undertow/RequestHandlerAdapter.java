@@ -21,9 +21,9 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.server.ReactiveServerHttpRequest;
+import org.springframework.http.server.ReactiveServerHttpResponse;
 import org.springframework.reactive.web.http.HttpHandler;
-import org.springframework.reactive.web.http.ServerHttpRequest;
-import org.springframework.reactive.web.http.ServerHttpResponse;
 import org.springframework.util.Assert;
 
 /**
@@ -43,9 +43,9 @@ class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
         RequestBodyPublisher requestBodyPublisher = new RequestBodyPublisher(exchange);
-        ServerHttpRequest request = new UndertowServerHttpRequest(exchange, requestBodyPublisher);
+        ReactiveServerHttpRequest request = new UndertowServerHttpRequest(exchange, requestBodyPublisher);
         ResponseBodySubscriber responseBodySubscriber = new ResponseBodySubscriber(exchange);
-        ServerHttpResponse response = new UndertowServerHttpResponse(exchange, responseBodySubscriber);
+        ReactiveServerHttpResponse response = new UndertowServerHttpResponse(exchange, responseBodySubscriber);
         exchange.dispatch();
         httpHandler.handle(request, response).subscribe(new Subscriber<Void>() {
             @Override
