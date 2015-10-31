@@ -50,6 +50,7 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
         @Override
         public void cancel() {
             cancelled = true;
+            close();
         }
 
         @Override
@@ -77,23 +78,29 @@ public class RequestBodyPublisher implements Publisher<ByteBuffer> {
         }
 
         private void doOnNext(ByteBuffer buffer){
+            signalInProgress = false;
             buffer.flip();
             subscriber.onNext(buffer);
-            signalInProgress = false;
         }
 
         private void doOnComplete(){
-            subscriber.onComplete();
             signalInProgress = false;
             complete = true;
-            close();
+            try {
+                subscriber.onComplete();
+            } finally {
+                close();
+            }
         }
 
         private void doOnError(Throwable t){
-            subscriber.onError(t);
             signalInProgress = false;
             complete = true;
-            close();
+            try {
+                subscriber.onError(t);
+            } finally {
+                close();
+            }
         }
 
         private void close(){
