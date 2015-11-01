@@ -19,12 +19,12 @@ package org.springframework.reactive.web.http.undertow;
 import io.undertow.server.HttpServerExchange;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.xnio.ChannelListener;
 import org.xnio.IoUtils;
 import org.xnio.Pooled;
 import org.xnio.channels.StreamSinkChannel;
+import reactor.core.subscriber.BaseSubscriber;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,13 +33,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.xnio.ChannelListeners.closingChannelExceptionHandler;
 import static org.xnio.ChannelListeners.flushingChannelListener;
 
 /**
  * @author Marek Hawrylczak
  */
-class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<StreamSinkChannel> {
+class ResponseBodySubscriber extends BaseSubscriber<ByteBuffer> implements ChannelListener<StreamSinkChannel> {
 
     private static final Log logger = LogFactory.getLog(ResponseBodySubscriber.class);
 
@@ -49,8 +50,8 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
 
     private Subscription subscription;
 
-    private final AtomicInteger running = new AtomicInteger();
-    private final AtomicBoolean shouldCloseChannel = new AtomicBoolean();
+    private final AtomicInteger writing = new AtomicInteger();
+    private final AtomicBoolean closing = new AtomicBoolean();
 
     public ResponseBodySubscriber(HttpServerExchange exchange) {
         this.exchange = exchange;
@@ -58,25 +59,28 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
     }
 
     @Override
-    public void onSubscribe(Subscription subscription) {
-        this.subscription = subscription;
-        this.subscription.request(1);
+    public void onSubscribe(Subscription s) {
+        super.onSubscribe(s);
+        subscription = s;
+        subscription.request(1);
     }
 
     @Override
     public void onNext(ByteBuffer buffer) {
+        super.onNext(buffer);
+
         if (responseChannel == null) {
             responseChannel = exchange.getResponseChannel();
         }
 
-        running.incrementAndGet();
+        writing.incrementAndGet();
         try {
             int c;
             do {
                 c = responseChannel.write(buffer);
             } while (buffer.hasRemaining() && c > 0);
             if (buffer.hasRemaining()) {
-                running.incrementAndGet();
+                writing.incrementAndGet();
                 enqueue(buffer);
                 responseChannel.getWriteSetter().set(this);
                 responseChannel.resumeWrites();
@@ -87,9 +91,9 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
         } catch (IOException ex) {
             onError(ex);
         } finally {
-            running.decrementAndGet();
-            if (shouldCloseChannel.get()){
-                attemptCloseChannel();
+            writing.decrementAndGet();
+            if (closing.get()){
+                closeIfSaved();
             }
         }
     }
@@ -127,10 +131,10 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
             if (!buffers.isEmpty()) {
                 channel.resumeWrites();
             } else {
-                running.decrementAndGet();
+                writing.decrementAndGet();
 
-                if (shouldCloseChannel.get()){
-                    attemptCloseChannel();
+                if (closing.get()){
+                    closeIfSaved();
                 } else {
                     subscription.request(1);
                 }
@@ -142,20 +146,27 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
 
     @Override
     public void onError(Throwable t) {
+        super.onError(t);
+        //TODO
+        if (!exchange.isResponseStarted() && exchange.getResponseCode() < INTERNAL_SERVER_ERROR.value()) {
+            exchange.setResponseCode(INTERNAL_SERVER_ERROR.value());
+        }
         logger.error("ResponseBodySubscriber error", t);
     }
 
     @Override
     public void onComplete() {
+        super.onComplete();
+
         if (responseChannel != null) {
-            shouldCloseChannel.set(true);
-            attemptCloseChannel();
+            closing.set(true);
+            closeIfSaved();
         }
     }
 
-    private boolean attemptCloseChannel() {
-        if (running.get() == 0){
-            if (shouldCloseChannel.compareAndSet(true, false)){
+    private boolean closeIfSaved() {
+        if (writing.get() == 0){
+            if (closing.compareAndSet(true, false)){
                 closeChannel();
                 return true;
             }

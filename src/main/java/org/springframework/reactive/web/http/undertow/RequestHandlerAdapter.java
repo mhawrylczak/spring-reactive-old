@@ -57,6 +57,7 @@ class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
 
             @Override
             public void onError(Throwable t) {
+                //TODO
                 if (!exchange.isResponseStarted() && exchange.getResponseCode() < INTERNAL_SERVER_ERROR.value()) {
                     exchange.setResponseCode(INTERNAL_SERVER_ERROR.value());
                 }
