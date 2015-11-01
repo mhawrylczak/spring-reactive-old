@@ -21,9 +21,11 @@ import io.undertow.util.SameThreadExecutor;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
+import org.springframework.util.Assert;
 import org.xnio.ChannelListener;
 import org.xnio.Pooled;
 import org.xnio.channels.StreamSourceChannel;
+import reactor.core.error.SpecificationExceptions;
 import reactor.core.support.BackpressureUtils;
 
 import java.io.IOException;
@@ -45,18 +47,20 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
             AtomicLongFieldUpdater.newUpdater(RequestBodySubscription.class, "demand");
 
     public RequestBodyPublisher(HttpServerExchange exchange) {
-        requireNonNull(exchange);
+        Assert.notNull(exchange, "'exchange' is required.");
         this.exchange = exchange;
     }
 
     @Override
-    public void subscribe(Subscriber<? super ByteBuffer> subscriber) {
-        requireNonNull(subscriber);
-        if (this.subscriber != null) {
-            subscriber.onError(new IllegalStateException("Only one subscriber allowed"));
+    public void subscribe(Subscriber<? super ByteBuffer> s) {
+        if (s == null) {
+            throw SpecificationExceptions.spec_2_13_exception();
+        }
+        if (subscriber != null) {
+            s.onError(new IllegalStateException("Only one subscriber allowed"));
         }
 
-        this.subscriber = subscriber;
+        subscriber = s;
         subscriber.onSubscribe(new RequestBodySubscription());
     }
 
@@ -65,9 +69,8 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
         private StreamSourceChannel channel;
         volatile long demand;
 
-
         private boolean subscriptionClosed;
-        private boolean signalInProgress;
+        private boolean draining;
 
         @Override
         public void cancel() {
@@ -84,15 +87,15 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
             }
 
             BackpressureUtils.getAndAdd(DEMAND, this, n);
-            scheduleNextSignal();
+            scheduleNextMessage();
         }
 
-        private void scheduleNextSignal() {
+        private void scheduleNextMessage() {
             exchange.dispatch(exchange.isInIoThread() ? SameThreadExecutor.INSTANCE : exchange.getIoThread(), this);
         }
 
         private void doOnNext(ByteBuffer buffer) {
-            signalInProgress = false;
+            draining = false;
             buffer.flip();
             subscriber.onNext(buffer);
         }
@@ -128,7 +131,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
         @Override
         public void run() {
-            if (subscriptionClosed || signalInProgress) {
+            if (subscriptionClosed || draining) {
                 return;
             }
 
@@ -136,7 +139,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                 return;
             }
 
-            signalInProgress = true;
+            draining = true;
 
             if (channel == null) {
                 channel = exchange.getRequestChannel();
@@ -167,7 +170,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                             }
                             doOnNext(buffer);
                             if (demand > 0) {
-                                scheduleNextSignal();
+                                scheduleNextMessage();
                             }
                             break;
                         }
@@ -203,7 +206,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
                             }
                             doOnNext(buffer);
                             if (demand > 0) {
-                                scheduleNextSignal();
+                                scheduleNextMessage();
                             }
                             break;
                         }

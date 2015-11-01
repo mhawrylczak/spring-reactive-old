@@ -19,19 +19,17 @@ package org.springframework.reactive.web.http.undertow;
 import io.undertow.server.HttpServerExchange;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.server.ReactiveServerHttpRequest;
 import org.springframework.http.server.ReactiveServerHttpResponse;
 import org.springframework.reactive.web.http.HttpHandler;
 import org.springframework.util.Assert;
 
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
+
 /**
  * @author Marek Hawrylczak
  */
 class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
-
-    private final Logger LOG = LoggerFactory.getLogger(RequestHandlerAdapter.class);
 
     private final HttpHandler httpHandler;
 
@@ -49,26 +47,25 @@ class RequestHandlerAdapter implements io.undertow.server.HttpHandler {
         exchange.dispatch();
         httpHandler.handle(request, response).subscribe(new Subscriber<Void>() {
             @Override
-            public void onSubscribe(Subscription s) {
-                s.request(Long.MAX_VALUE);
-                LOG.debug("onSubscribe");
+            public void onSubscribe(Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
             }
 
             @Override
             public void onNext(Void aVoid) {
-                LOG.debug("onNext");
             }
 
             @Override
             public void onError(Throwable t) {
+                if (!exchange.isResponseStarted() && exchange.getResponseCode() < INTERNAL_SERVER_ERROR.value()) {
+                    exchange.setResponseCode(INTERNAL_SERVER_ERROR.value());
+                }
                 exchange.endExchange();
-                LOG.error("onError", t);
             }
 
             @Override
             public void onComplete() {
                 exchange.endExchange();
-                LOG.debug("onComplete");
             }
         });
     }
