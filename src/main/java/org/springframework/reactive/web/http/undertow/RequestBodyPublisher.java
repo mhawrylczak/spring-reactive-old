@@ -41,7 +41,7 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
     private final HttpServerExchange exchange;
     private Subscriber<? super ByteBuffer> subscriber;
 
-    static final AtomicLongFieldUpdater<RequestBodySubscription> DEMAND =
+    private static final AtomicLongFieldUpdater<RequestBodySubscription> DEMAND =
             AtomicLongFieldUpdater.newUpdater(RequestBodySubscription.class, "demand");
 
     public RequestBodyPublisher(HttpServerExchange exchange) {
