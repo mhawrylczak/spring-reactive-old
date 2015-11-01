@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.xnio.ChannelListeners.closingChannelExceptionHandler;
 import static org.xnio.ChannelListeners.flushingChannelListener;
@@ -43,10 +45,12 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
 
     private final HttpServerExchange exchange;
     private final Queue<Pooled<ByteBuffer>> buffers;
+    private StreamSinkChannel responseChannel;
 
     private Subscription subscription;
 
-    private StreamSinkChannel responseChannel;
+    private final AtomicInteger running = new AtomicInteger();
+    private final AtomicBoolean shouldCloseChannel = new AtomicBoolean();
 
     public ResponseBodySubscriber(HttpServerExchange exchange) {
         this.exchange = exchange;
@@ -64,12 +68,15 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
         if (responseChannel == null) {
             responseChannel = exchange.getResponseChannel();
         }
+
+        running.incrementAndGet();
         try {
             int c;
             do {
                 c = responseChannel.write(buffer);
             } while (buffer.hasRemaining() && c > 0);
             if (buffer.hasRemaining()) {
+                running.incrementAndGet();
                 enqueue(buffer);
                 responseChannel.getWriteSetter().set(this);
                 responseChannel.resumeWrites();
@@ -79,6 +86,11 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
 
         } catch (IOException ex) {
             onError(ex);
+        } finally {
+            running.decrementAndGet();
+            if (shouldCloseChannel.get()){
+                attemptCloseChannel();
+            }
         }
     }
 
@@ -115,7 +127,13 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
             if (!buffers.isEmpty()) {
                 channel.resumeWrites();
             } else {
-                this.subscription.request(1);
+                running.decrementAndGet();
+
+                if (shouldCloseChannel.get()){
+                    attemptCloseChannel();
+                } else {
+                    subscription.request(1);
+                }
             }
         } catch (IOException ex) {
             onError(ex);
@@ -130,23 +148,33 @@ class ResponseBodySubscriber implements Subscriber<ByteBuffer>, ChannelListener<
     @Override
     public void onComplete() {
         if (responseChannel != null) {
-            writeDone(responseChannel);
+            shouldCloseChannel.set(true);
+            attemptCloseChannel();
         }
-        logger.debug("onComplete");
     }
 
-    protected void writeDone(final StreamSinkChannel channel) {
-        try {
-            channel.shutdownWrites();
-
-            if (!channel.flush()) {
-                channel.getWriteSetter().set(
-                        flushingChannelListener(
-                                o -> IoUtils.safeClose(channel),
-                                closingChannelExceptionHandler()));
-                channel.resumeWrites();
-
+    private boolean attemptCloseChannel() {
+        if (running.get() == 0){
+            if (shouldCloseChannel.compareAndSet(true, false)){
+                closeChannel();
+                return true;
             }
+        }
+        return false;
+    }
+
+    private void closeChannel() {
+        try {
+            responseChannel.shutdownWrites();
+
+            if (!responseChannel.flush()) {
+                responseChannel.getWriteSetter().set(
+                        flushingChannelListener(
+                                o -> IoUtils.safeClose(responseChannel),
+                                closingChannelExceptionHandler()));
+                responseChannel.resumeWrites();
+            }
+            responseChannel = null;
         } catch (IOException ex) {
             onError(ex);
         }
