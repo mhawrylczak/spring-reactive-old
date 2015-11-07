@@ -144,9 +144,12 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
             if (channel == null) {
                 channel = exchange.getRequestChannel();
 
-                if (channel == null && exchange.isRequestComplete()) {
-//                    doOnComplete();
-                    return;
+                if (channel == null) {
+                    if (exchange.isRequestComplete()) {
+                        return;
+                    } else {
+                        throw new IllegalStateException("Another party already acquired the channel!");
+                    }
                 }
             }
             if (pooledBuffer == null) {
