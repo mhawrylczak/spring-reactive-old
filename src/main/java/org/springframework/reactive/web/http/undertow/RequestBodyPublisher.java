@@ -143,6 +143,11 @@ class RequestBodyPublisher implements Publisher<ByteBuffer> {
 
             if (channel == null) {
                 channel = exchange.getRequestChannel();
+
+                if (channel == null && exchange.isRequestComplete()) {
+//                    doOnComplete();
+                    return;
+                }
             }
             if (pooledBuffer == null) {
                 pooledBuffer = exchange.getConnection().getBufferPool().allocate();

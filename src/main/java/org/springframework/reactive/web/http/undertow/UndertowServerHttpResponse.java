@@ -19,10 +19,12 @@ package org.springframework.reactive.web.http.undertow;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.util.HttpString;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ReactiveServerHttpResponse;
 import reactor.Publishers;
+import reactor.rx.Streams;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -53,7 +55,24 @@ class UndertowServerHttpResponse implements ReactiveServerHttpResponse {
     @Override
     public Publisher<Void> setBody(Publisher<ByteBuffer> contentPublisher) {
         applyHeaders();
-        return (s -> contentPublisher.subscribe(responseBodySubscriber));
+        return s -> s.onSubscribe(new Subscription() {
+            @Override
+            public void request(long n) {
+                Streams.wrap(contentPublisher)
+                        .finallyDo(byteBufferSignal -> {
+                                    if (byteBufferSignal.isOnComplete()) {
+                                        s.onComplete();
+                                    } else {
+                                        s.onError(byteBufferSignal.getThrowable());
+                                    }
+                                }
+                        ).subscribe(responseBodySubscriber);
+            }
+
+            @Override
+            public void cancel() {
+            }
+        });
     }
 
     @Override
@@ -64,7 +83,16 @@ class UndertowServerHttpResponse implements ReactiveServerHttpResponse {
     @Override
     public Publisher<Void> writeHeaders() {
         applyHeaders();
-        return Publishers.empty();
+        return  s -> s.onSubscribe(new Subscription() {
+            @Override
+            public void request(long n) {
+                s.onComplete();
+            }
+
+            @Override
+            public void cancel() {
+            }
+        });
     }
 
     private void applyHeaders() {
